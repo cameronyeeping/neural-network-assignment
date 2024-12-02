@@ -245,13 +245,21 @@ class RegressionModel(object):
 
         # 1 layer network
         """
+        param = 100, batch = 50, learn = 0.01 -> Your final loss is: 0.001000 in 1,328,7800 number of processing iterations
+        param = 100, batch = 20, learn = 0.01 -> Your final loss is: 0.001000 in 9,725,600 number of processing iterations
+        param = 100, batch = 20, learn = 0.02 -> Your final loss is: 0.000995 in 3,256,600 number of processing iterations
+
+        
+        
         """
-        self.w1 = nn.Parameter(1, 150)
-        self.b1 = nn.Parameter(1, 150)
-        self.w2 = nn.Parameter(150, 1)
+        h = 200
+        self.w1 = nn.Parameter(1, h)
+        self.b1 = nn.Parameter(1, h)
+        self.w2 = nn.Parameter(h, 1)
         self.b2 = nn.Parameter(1, 1) # the result
         self.batch_size = 100
-        self.learning_rate = 0.01
+        self.learning_rate = 0.1
+        self.threshold = 0.01
 
 
     def run(self, x):
@@ -295,7 +303,7 @@ class RegressionModel(object):
         "*** YOUR CODE HERE ***"
         # train until loss < 0.02
         loss = 1
-        while loss > 0.02:
+        while loss > self.threshold:
             for batch_x, batch_y in dataset.iterate_once(self.batch_size):
                 loss_object = self.get_loss(batch_x, batch_y)
                 grad_w1, grad_b1, grad_w2, grad_b2 = nn.gradients(loss_object, [self.w1, self.b1, self.w2, self.b2])
@@ -328,17 +336,19 @@ class DigitClassificationModel(object):
         # classifier, so needs 10 output nodes
         # use two hidden layers because the 3blue1brown video used two
         # input layer is 784 dimensions
-        self.w1 = nn.Parameter(784, 16)
-        self.b1 = nn.Parameter(1, 16)
+        h = 200
+        self.w1 = nn.Parameter(784, h)
+        self.b1 = nn.Parameter(1, h)
 
-        self.w2 = nn.Parameter(16, 16)
-        self.b2 = nn.Parameter(1, 16)
+        self.w2 = nn.Parameter(h, h)
+        self.b2 = nn.Parameter(1, h)
 
-        self.w3 = nn.Parameter(16, 10)
+        self.w3 = nn.Parameter(h, 10)
         self.b3 = nn.Parameter(1, 10)
 
-        self.learning_rate = 0.01
-        self.batch_size = 100
+        self.learning_rate = 0.1
+        self.batch_size = 200
+        self.threshold = 0.98
 
 
 
@@ -376,8 +386,7 @@ class DigitClassificationModel(object):
             y: a node with shape (batch_size x 10)
         Returns: a loss node
         """
-        # first get
-
+        return nn.SoftmaxLoss(self.run(x), y)
 
 
     def train(self, dataset):
@@ -385,7 +394,19 @@ class DigitClassificationModel(object):
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        validation_acc = 0.0
+        while validation_acc < self.threshold:
+            for batch_x, batch_y in dataset.iterate_once(self.batch_size):
+                soft_max_loss = self.get_loss(batch_x, batch_y)
+                grad_w1, grad_b1, grad_w2, grad_b2, grad_w3, grad_b3 = nn.gradients(soft_max_loss, [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3])
+                self.b1.update(grad_b1, -self.learning_rate)
+                self.b2.update(grad_b2, -self.learning_rate)
+                self.b3.update(grad_b3, -self.learning_rate)
+                self.w1.update(grad_w1, -self.learning_rate)
+                self.w2.update(grad_w2, -self.learning_rate)
+                self.w3.update(grad_w3, -self.learning_rate)
+            validation_acc = dataset.get_validation_accuracy()
+        print('stopped training with validation accuracy:', validation_acc, 'and epoch', dataset.epoch)
 
 ###################################################################################
 class LanguageIDModel(object):
