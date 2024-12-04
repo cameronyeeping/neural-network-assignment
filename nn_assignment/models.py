@@ -55,7 +55,7 @@ class NaiveBayesDigitClassificationModel(object):
             # counting occurrences
             commonPrior[label] += 1
             for feat, value in datum.items():
-                commonCounts[(feat, label)] += 1 # add value (either 0 or 1) to commonCounts to keep track of num occurrences
+                commonCounts[(feat, label)] += 1 # add 1 for num times ive seen the feature
                 if value > 0:
                     commonConditionalProb[(feat, label)] += 1
             # commonConditionalProb = ??
@@ -83,14 +83,13 @@ class NaiveBayesDigitClassificationModel(object):
                 for feat in self.features:
                     "*** YOUR CODE HERE to update conditionalProb and counts using Laplace smoothing ***"
                     conditionalProb[(feat, label)] += k
-                    counts[(feat, label)] += 2*k # add k to twice (for each outcome)
-                    #util.raiseNotDefined()
+                    counts[(feat, label)] += k * len(self.legalLabels)
 
             # normalizing:
             prior.normalize()
             "**** YOUR CODE HERE to normalize conditionalProb "
             for x, count in conditionalProb.items():
-                conditionalProb[x] = count * 1.0 / counts[x] # occurrences / total
+                conditionalProb[x] = count / counts[x] # occurrences / total
                 
             self.prior = prior
             self.conditionalProb = conditionalProb
@@ -135,16 +134,15 @@ class NaiveBayesDigitClassificationModel(object):
         To get the list of all possible features or labels, use self.features and
         self.legalLabels.
         """
-        # calculate log(P(Y)) + sum of log conditional probabilities
-        # conditional probabilities: Probability of feature occurring given class Y
-        # we need P(feat|Y), so the value needs to be 1
         logJoint = util.Counter()
         for label in self.legalLabels:
             logJoint[label] = math.log(self.prior[label])
             for feat, val in datum.items():
                 if val > 0:
+                    # use stored probability if feature is active
                     logJoint[label] += math.log(self.conditionalProb[(feat, label)])
                 else:
+                    # use 1 - prob if feature is inactive
                     logJoint[label] += math.log(1 - self.conditionalProb[(feat, label)])
         return logJoint
 
@@ -333,10 +331,9 @@ class DigitClassificationModel(object):
     working on this part of the project.)
     """
     def __init__(self):
-        # classifier, so needs 10 output nodes
-        # use two hidden layers because the 3blue1brown video used two
+        # classifier, so needs 10 output nodes (one for each digit)
         # input layer is 784 dimensions
-        h = 200
+        h = 100
         self.w1 = nn.Parameter(784, h)
         self.b1 = nn.Parameter(1, h)
 
@@ -347,8 +344,8 @@ class DigitClassificationModel(object):
         self.b3 = nn.Parameter(1, 10)
 
         self.learning_rate = 0.1
-        self.batch_size = 200
-        self.threshold = 0.98
+        self.batch_size = 100
+        self.threshold = 0.975
 
 
 
@@ -396,6 +393,7 @@ class DigitClassificationModel(object):
         "*** YOUR CODE HERE ***"
         validation_acc = 0.0
         while validation_acc < self.threshold:
+            # iterate over the data ONCE
             for batch_x, batch_y in dataset.iterate_once(self.batch_size):
                 soft_max_loss = self.get_loss(batch_x, batch_y)
                 grad_w1, grad_b1, grad_w2, grad_b2, grad_w3, grad_b3 = nn.gradients(soft_max_loss, [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3])
@@ -422,12 +420,53 @@ class LanguageIDModel(object):
         # combined alphabets of the five languages contain a total of 47 unique
         # characters.
         # You can refer to self.num_chars or len(self.languages) in your code
+        # Languages one word at a time
+        # recurrent neural network processes data across multiple time steps
+        """
+            separate input for each character in the word: x_0, x_1, ... , x_L-1 where L is the length of the word.
+            start by applying a network f_initial that is just like the networks in the previous problems. It accepts
+            input x_0 and computes an output vector h_1 of dimenionality d:
+                h_1 = f_initial(x_0)
+            next we combine the output of previous step with next letter of the word, generating a vector summary of the
+            first two letters of the word. To do this, we'll apply a sub-network that accepts a letter and outputs a
+            hidden state, but now also depends on the previous hidden state, h_1. Denote this sub-network as f.
+            This pattern continues for all letters in the input word, where the hidden state at each step summarizes all
+            the letters the network has processed thus far:
+                h2 = f(h_1, x_1)
+                h3 = f(h_2, x_2)
+                ...
+            the function f (.,.) is the same piece of nn and uses the same trainable parameters; f_init will also share
+            some of the same parameters as f(.,.)
+            In this way, the parameters used when processing words of different length are all shared. You can implement
+            this using a for loop over the provided inputs xs, where each iteration of the loop computes either f_initial
+            or f
+
+            What is the input? one of 47 different characters (1 x 47 vector)
+
+            hidden layers = 1
+            we just pass through the hidden layers a bunch of times
+
+        """
         self.num_chars = 47
         self.languages = ["English", "Spanish", "Finnish", "Dutch", "Polish"]
+        self.threshold = 0.85
 
-        # Initialize your model parameters here
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        # tweakable parameters
+        h = 50
+        self.learning_rate = 0.05
+        self.batch_size = 50
+
+        # input layer
+        self.w_initial = nn.Parameter(47, h)
+        self.b_initial = nn.Parameter(1, h)
+
+        # hidden layer
+        self.w_hidden = nn.Parameter(h, h)
+        self.b_hidden = nn.Parameter(1, h)
+
+        # output layer
+        self.w_output = nn.Parameter(h, len(self.languages)) # need to output to one of these languages
+        self.b_output = nn.Parameter(1, len(self.languages))
 
 
     def run(self, xs):
@@ -458,9 +497,27 @@ class LanguageIDModel(object):
         Returns:
             A node with shape (batch_size x 5) containing predicted scores
                 (also called logits)
+        h = f(x * W_x and W_h * ht-1 + b)
+        W_x is initial weight
+        W_h is hidden weight (second layer)
+        f is activation func
+
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        a0 = nn.AddBias(nn.Linear(xs[0], self.w_initial), self.b_initial)
+        z0 = nn.ReLU(a0) # initial
+        a1 = nn.AddBias(nn.Linear(z0, self.w_hidden), self.b_hidden)
+        ht = nn.ReLU(a1)
+        for i in range(1, len(xs)):
+            # h is previous timestep's calculation
+            w = nn.Linear(xs[i], self.w_initial)
+            wh = nn.AddBias(nn.Linear(ht, self.w_hidden), self.b_hidden) # i am not sure this will work
+            ht = nn.ReLU(nn.Add(w, wh))
+        return nn.AddBias(nn.Linear(ht, self.w_output), self.b_output)
+
+
+
+
+
 
     def get_loss(self, xs, y):
         """
@@ -477,11 +534,25 @@ class LanguageIDModel(object):
         Returns: a loss node
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return nn.SoftmaxLoss(self.run(xs), y)
 
     def train(self, dataset):
         """
         Trains the model.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        validation_acc = 0.0
+        while validation_acc < self.threshold:
+            # iterate over the data ONCE
+            for batch_x, batch_y in dataset.iterate_once(self.batch_size):
+                soft_max_loss = self.get_loss(batch_x, batch_y)
+                grad_wi, grad_bi, grad_wh, grad_bh, grad_wo, grad_bo = nn.gradients(soft_max_loss, [self.w_initial, self.b_initial, self.w_hidden, self.b_hidden, self.w_output, self.b_output])
+                self.b_initial.update(grad_bi, -self.learning_rate)
+                self.b_hidden.update(grad_bh, -self.learning_rate)
+                self.b_output.update(grad_bo, -self.learning_rate)
+                self.w_initial.update(grad_wi, -self.learning_rate)
+                self.w_hidden.update(grad_wh, -self.learning_rate)
+                self.w_output.update(grad_wo, -self.learning_rate)
+            validation_acc = dataset.get_validation_accuracy()
+        print('stopped training with validation accuracy:', validation_acc, 'and epoch', dataset.epoch)
